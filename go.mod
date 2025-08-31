@@ -7,6 +7,8 @@ require (
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b
 )
 
+require github.com/golang-migrate/migrate v3.5.4+incompatible // indirect
+
 require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/finaptica/protos v0.0.0-20250828205900-fe5fa58210ef // indirect

@@ -122,10 +122,15 @@ func (a *AuthService) RegisterNewUser(ctx context.Context, email, password strin
 func (a *AuthService) IsAdmin(ctx context.Context, userId int64) (isAdmin bool, err error) {
 	const op = "Auth.IsAdmin"
 
-	log := a.log.With(slog.String("op", op), slog.String("email", email))
+	log := a.log.With(slog.String("op", op), slog.Int64("userId", userId))
+
+	log.Info("checking that user is admin")
 
 	isAdmin, err = a.userProvider.IsAdmin(ctx, userId)
 	if err != nil {
-		log.Info("")
+		log.Error("failed to check user", sl.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
 	}
+	log.Info("checked that user is admin", slog.Bool("isAdmin", isAdmin))
+	return isAdmin, nil
 }
