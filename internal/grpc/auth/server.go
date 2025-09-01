@@ -9,18 +9,18 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type IAuthService interface {
+type AuthService interface {
 	Login(ctx context.Context, email string, password string, appId int) (token string, err error)
-	RegisterNewUser(ctx context.Context, email, password string) (userId int, err error)
-	IsAdmin(ctx context.Context, userId int) (isAdmin bool, err error)
+	RegisterNewUser(ctx context.Context, email, password string) (userId int64, err error)
+	IsAdmin(ctx context.Context, userId int64) (isAdmin bool, err error)
 }
 
 type serverAPI struct {
 	ssov1.UnimplementedAuthServer
-	authService IAuthService
+	authService AuthService
 }
 
-func Register(gRPC *grpc.Server, auth IAuthService) {
+func Register(gRPC *grpc.Server, auth AuthService) {
 	ssov1.RegisterAuthServer(gRPC, &serverAPI{authService: auth})
 }
 

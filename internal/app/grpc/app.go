@@ -6,34 +6,35 @@ import (
 	"net"
 
 	authgrpc "github.com/finaptica/sso/internal/grpc/auth"
+	auth "github.com/finaptica/sso/internal/services/auth"
 	"google.golang.org/grpc"
 )
 
-type App struct {
+type AppServer struct {
 	log        *slog.Logger
 	gRPCServer *grpc.Server
 	port       int
 }
 
-func New(logger *slog.Logger, port int) *App {
+func New(logger *slog.Logger, port int, authService *auth.AuthService) *AppServer {
 	gRPCServer := grpc.NewServer()
 
-	authgrpc.Register(gRPCServer)
+	authgrpc.Register(gRPCServer, authService)
 
-	return &App{
+	return &AppServer{
 		log:        logger,
 		gRPCServer: gRPCServer,
 		port:       port,
 	}
 }
 
-func (a *App) MustRun() {
+func (a *AppServer) MustRun() {
 	if err := a.Run(); err != nil {
 		panic(err)
 	}
 }
 
-func (a *App) Run() error {
+func (a *AppServer) Run() error {
 	const op = "grpcapp.Run"
 	log := a.log.With(
 		slog.String("op", op),
@@ -53,7 +54,7 @@ func (a *App) Run() error {
 	return nil
 }
 
-func (a *App) Stop() {
+func (a *AppServer) Stop() {
 	const op = "grcpapp.Stop"
 
 	a.log.With(slog.String("op", op)).Info("Stopping gRPC server", slog.Int("port", a.port))
