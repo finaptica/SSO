@@ -13,26 +13,41 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// "host=localhost port=5432 user=fin_admin password=12345678FinAdmin dbname=finaptica sslmode=disable"
 func main() {
-	var migrationsPath string
+	var migrationsPath, dbUser, dbPassword, dbHost, dbPort, dbName string
 
 	flag.StringVar(&migrationsPath, "migrations-path", "", "path to migrations")
+	flag.StringVar(&dbUser, "db-user", "", "database user")
+	flag.StringVar(&dbPassword, "db-password", "", "database password")
+	flag.StringVar(&dbHost, "db-host", "", "database host")
+	flag.StringVar(&dbPort, "db-port", "", "database port")
+	flag.StringVar(&dbName, "db-name", "", "target database name")
 	flag.Parse()
 
 	if migrationsPath == "" {
 		panic("migrations-path is required")
 	}
 
-	db, _ := sql.Open("postgres", "postgres://fin_admin:12345678FinAdmin@localhost:5432/finaptica?sslmode=enable")
-	driver, _ := postgres.WithInstance(db, &postgres.Config{})
+	connectionString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPassword, dbHost, dbPort, dbName)
+
+	db, err := sql.Open("postgres", connectionString)
+	if err != nil {
+		fmt.Printf("failed to open connection with db: %s", err.Error())
+	}
+
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		fmt.Printf("failder to get postgres postgres driver with instance: %s", err.Error())
+	}
+
 	m, err := migrate.NewWithDatabaseInstance(
 		"file://"+migrationsPath,
 		"postgres", driver)
-	m.Up()
 	if err != nil {
 		panic(err)
 	}
+
+	m.Up()
 
 	if err := m.Up(); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
