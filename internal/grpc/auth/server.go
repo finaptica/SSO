@@ -4,6 +4,7 @@ import (
 	"context"
 
 	ssov1 "github.com/finaptica/protos/gen/go/sso"
+	"github.com/finaptica/sso/internal/lib/errs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -28,7 +29,23 @@ const (
 )
 
 func (s *serverAPI) Register(ctx context.Context, req *ssov1.RegisterRequest) (*ssov1.RegisterResponse, error) {
-	panic("implement me")
+	if err := validateRegister(req); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	id, err := s.authService.Register(ctx, req.GetEmail(), req.GetPassword())
+	if err != nil {
+		switch errs.KindOf(err) {
+		case errs.AlreadyExists:
+			return nil, status.Error(codes.AlreadyExists, "Email already registered")
+		case errs.Invalid:
+			return nil, status.Error(codes.InvalidArgument, "Invalid request")
+		default:
+			return nil, toStatus(err)
+		}
+	}
+
+	return &ssov1.RegisterResponse{UserId: id}, nil
 }
 
 func (s *serverAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.LoginResponse, error) {
@@ -38,12 +55,41 @@ func (s *serverAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.
 
 	token, err := s.authService.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.AppId))
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "Invalid email or password")
+		if errs.KindOf(err) == errs.Unauthenticated {
+			return nil, status.Error(codes.Unauthenticated, "Invalid email or password")
+		}
+		return nil, toStatus(err)
 	}
 
 	return &ssov1.LoginResponse{
 		Token: token,
 	}, nil
+}
+
+func toStatus(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch errs.KindOf(err) {
+	case errs.Invalid:
+		return status.Error(codes.InvalidArgument, "Invalid request")
+	case errs.NotFound:
+		return status.Error(codes.NotFound, "Not found")
+	case errs.AlreadyExists:
+		return status.Error(codes.AlreadyExists, "Already exists")
+	case errs.Unauthenticated:
+		return status.Error(codes.Unauthenticated, "Unauthenticated")
+	case errs.PermissionDenied:
+		return status.Error(codes.PermissionDenied, "Permission denied")
+	case errs.Conflict:
+		return status.Error(codes.Aborted, "Conflict")
+	case errs.Timeout:
+		return status.Error(codes.DeadlineExceeded, "Timeout")
+	case errs.Unavailable:
+		return status.Error(codes.Unavailable, "Service unavailable")
+	default:
+		return status.Error(codes.Internal, "Internal error")
+	}
 }
 
 func validateLogin(req *ssov1.LoginRequest) error {

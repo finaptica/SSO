@@ -37,7 +37,7 @@ func main() {
 
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
-		fmt.Printf("failder to get postgres postgres driver with instance: %s", err.Error())
+		fmt.Printf("failed to get postgres driver with instance: %s", err.Error())
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
@@ -46,8 +46,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	m.Up()
 
 	if err := m.Up(); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {

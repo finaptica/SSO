@@ -3,10 +3,10 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log/slog"
 
 	"github.com/finaptica/sso/internal/domain/models"
+	"github.com/finaptica/sso/internal/lib/errs"
 	"github.com/finaptica/sso/internal/storage"
 	"github.com/jmoiron/sqlx"
 )
@@ -21,15 +21,16 @@ func NewAppRepository(log *slog.Logger, db *sqlx.DB) *AppRepository {
 }
 
 func (r *AppRepository) GetApp(ctx context.Context, appId int) (models.App, error) {
+	const op = "appRepository.GetApp"
 	var app models.App
 	err := r.db.GetContext(ctx, &app,
-		`SELECT id, name FROM apps WHERE id = $1`, appId,
+		`SELECT id, name, secret FROM apps WHERE id = $1`, appId,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return models.App{}, storage.ErrUserNotFound
+			return models.App{}, errs.WithKind(op, errs.NotFound, storage.ErrAppNotFound)
 		}
-		return models.App{}, fmt.Errorf("get user: %w", err)
+		return models.App{}, errs.WithKind(op, errs.Internal, err)
 	}
 	return app, nil
 }

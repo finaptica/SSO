@@ -3,11 +3,11 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/finaptica/sso/internal/domain/models"
+	"github.com/finaptica/sso/internal/lib/errs"
 	"github.com/finaptica/sso/internal/lib/jwt"
 	"github.com/finaptica/sso/internal/lib/logger/sl"
 	"github.com/finaptica/sso/internal/storage"
@@ -15,38 +15,29 @@ import (
 )
 
 type AuthService struct {
-	userSaver    UserSaver
-	userProvider UserProvider
-	appProvider  AppProvider
-	log          *slog.Logger
-	tokenTTL     time.Duration
+	userRepository UserRepository
+	appRepository  AppRepository
+	log            *slog.Logger
+	tokenTTL       time.Duration
 }
 
-type UserSaver interface {
+type UserRepository interface {
 	CreateUser(ctx context.Context, email string, passHash []byte) (uid int64, err error)
-}
-
-type UserProvider interface {
 	GetUserByEmail(ctx context.Context, email string) (models.User, error)
 	IsUserExistByEmail(ctx context.Context, email string) (bool, error)
 }
 
-type AppProvider interface {
+type AppRepository interface {
 	GetApp(ctx context.Context, appId int) (models.App, error)
 }
 
-var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-)
-
 // NewAuthService returns a new instance of the AuthService
-func NewAuthService(log *slog.Logger, userSaver UserSaver, userProvider UserProvider, appProvider AppProvider, ttl time.Duration) *AuthService {
+func NewAuthService(log *slog.Logger, userRepository UserRepository, appRepository AppRepository, ttl time.Duration) *AuthService {
 	return &AuthService{
-		log:          log,
-		userProvider: userProvider,
-		appProvider:  appProvider,
-		userSaver:    userSaver,
-		tokenTTL:     ttl,
+		log:            log,
+		userRepository: userRepository,
+		appRepository:  appRepository,
+		tokenTTL:       ttl,
 	}
 }
 
@@ -57,40 +48,38 @@ func (a *AuthService) Login(ctx context.Context, email string, password string, 
 
 	log.Info("attempting to login user")
 
-	user, err := a.userProvider.GetUserByEmail(ctx, email)
+	user, err := a.userRepository.GetUserByEmail(ctx, email)
 	if err != nil {
-		if errors.Is(err, storage.ErrUserNotFound) {
-			log.Warn("user not found", sl.Err(err))
-			return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		if errs.KindOf(err) == errs.NotFound || errors.Is(err, storage.ErrUserNotFound) {
+			log.Info("user not found", sl.Err(err))
+			return "", errs.WithKind(op, errs.Unauthenticated, err)
 		}
 
 		log.Error("failed to get user", sl.Err(err))
-
-		return "", fmt.Errorf("%s: %w", op, err)
+		return "", errs.WithKind(op, errs.Internal, err)
 	}
 
 	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(password))
 	if err != nil {
-		a.log.Error("invalid passowrd", sl.Err(err))
-
-		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		log.Error("invalid password", sl.Err(err))
+		return "", errs.WithKind(op, errs.Unauthenticated, err)
 	}
 
-	app, err := a.appProvider.GetApp(ctx, appId)
+	app, err := a.appRepository.GetApp(ctx, appId)
 	if err != nil {
-		if errors.Is(err, storage.ErrAppNotFound) {
-			a.log.Warn("app not found", sl.Err(err))
-			return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		if errs.KindOf(err) == errs.NotFound || errors.Is(err, storage.ErrAppNotFound) {
+			log.Warn("app not found", sl.Err(err))
+			return "", errs.WithKind(op, errs.Unauthenticated, err)
 		}
 
-		a.log.Error("failed to get app", sl.Err(err))
-		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		log.Error("failed to get app", sl.Err(err))
+		return "", errs.WithKind(op, errs.Internal, err)
 	}
-	log.Info("user loggen in successfully")
+	log.Info("user logged in successfully")
 	token, err = jwt.NewToken(user, app, a.tokenTTL)
 	if err != nil {
-		a.log.Error("failed to generate jwt token", sl.Err(err))
-		return "", fmt.Errorf("%s: %w", op, err)
+		log.Error("failed to generate jwt token", sl.Err(err))
+		return "", errs.WithKind(op, errs.Internal, err)
 	}
 
 	return token, nil
@@ -106,24 +95,17 @@ func (a *AuthService) Register(ctx context.Context, email, password string) (use
 	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Error("failed to generate password hash", sl.Err(err))
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return 0, errs.WithKind(op, errs.Internal, err)
 	}
 
-	isExist, err := a.userProvider.IsUserExistByEmail(ctx, email)
+	id, err := a.userRepository.CreateUser(ctx, email, passHash)
 	if err != nil {
-		log.Error("failed to check is user exist", sl.Err(err))
-		return 0, fmt.Errorf("%s: %w", op, err)
-	}
-
-	if isExist {
-		log.Info("user with this email already exists")
-		return 0, fmt.Errorf("%s: %s", op, "user with this email already exists")
-	}
-
-	id, err := a.userSaver.CreateUser(ctx, email, passHash)
-	if err != nil {
-		log.Error("failed to save new user", sl.Err(err))
-		return 0, fmt.Errorf("%s: %w", op, err)
+		if errs.KindOf(err) == errs.AlreadyExists || errors.Is(err, storage.ErrUserExists) {
+			log.Info("user already exists on create", sl.Err(err))
+			return 0, errs.WithKind(op, errs.AlreadyExists, err)
+		}
+		log.Error("failed to create new user", sl.Err(err))
+		return 0, errs.WithKind(op, errs.Internal, err)
 	}
 
 	log.Info("user registered")

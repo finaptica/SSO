@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
@@ -33,7 +34,7 @@ func MustLoad() *Config {
 	var cfg Config
 
 	if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
-		panic("failed to parse config")
+		panic(fmt.Sprintf("failed to parse config: %s", err.Error()))
 	}
 
 	return &cfg

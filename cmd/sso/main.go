@@ -29,7 +29,7 @@ func main() {
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
 	<-stop
 	application.GRPCSrv.Stop()
-	log.Info("Application stoped")
+	log.Info("Application stopped")
 }
 
 func setupLogger(env string) *slog.Logger {

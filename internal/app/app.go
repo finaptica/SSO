@@ -22,7 +22,7 @@ func New(log *slog.Logger, grpcPort int, postgresConnectionString string, tokenT
 	}
 	userRepository := repository.NewUserRepository(log, db)
 	appRepository := repository.NewAppRepository(log, db)
-	authService := auth.NewAuthService(log, userRepository, userRepository, appRepository, tokenTTL)
+	authService := auth.NewAuthService(log, userRepository, appRepository, tokenTTL)
 	grpcApp := grpcapp.New(log, grpcPort, authService)
 	return &App{
 		GRPCSrv: grpcApp,
