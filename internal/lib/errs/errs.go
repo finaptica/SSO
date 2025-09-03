@@ -3,6 +3,9 @@ package errs
 import (
 	"errors"
 	"fmt"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Kind string
@@ -65,4 +68,30 @@ func KindOf(err error) Kind {
 		}
 	}
 	return Internal
+}
+
+func ToStatus(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch KindOf(err) {
+	case Invalid:
+		return status.Error(codes.InvalidArgument, "Invalid request")
+	case NotFound:
+		return status.Error(codes.NotFound, "Not found")
+	case AlreadyExists:
+		return status.Error(codes.AlreadyExists, "Already exists")
+	case Unauthenticated:
+		return status.Error(codes.Unauthenticated, "Unauthenticated")
+	case PermissionDenied:
+		return status.Error(codes.PermissionDenied, "Permission denied")
+	case Conflict:
+		return status.Error(codes.Aborted, "Conflict")
+	case Timeout:
+		return status.Error(codes.DeadlineExceeded, "Timeout")
+	case Unavailable:
+		return status.Error(codes.Unavailable, "Service unavailable")
+	default:
+		return status.Error(codes.Internal, "Internal error")
+	}
 }

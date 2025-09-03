@@ -2,15 +2,12 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/finaptica/sso/internal/domain/models"
 	"github.com/finaptica/sso/internal/lib/errs"
 	"github.com/finaptica/sso/internal/lib/jwt"
-	"github.com/finaptica/sso/internal/lib/logger/sl"
-	"github.com/finaptica/sso/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -24,7 +21,6 @@ type AuthService struct {
 type UserRepository interface {
 	CreateUser(ctx context.Context, email string, passHash []byte) (uid int64, err error)
 	GetUserByEmail(ctx context.Context, email string) (models.User, error)
-	IsUserExistByEmail(ctx context.Context, email string) (bool, error)
 }
 
 type AppRepository interface {
@@ -50,43 +46,39 @@ func (a *AuthService) Login(ctx context.Context, email string, password string, 
 
 	user, err := a.userRepository.GetUserByEmail(ctx, email)
 	if err != nil {
-		if errs.KindOf(err) == errs.NotFound || errors.Is(err, storage.ErrUserNotFound) {
-			log.Info("user not found", sl.Err(err))
+		if errs.KindOf(err) == errs.NotFound {
 			return "", errs.WithKind(op, errs.Unauthenticated, err)
 		}
 
-		log.Error("failed to get user", sl.Err(err))
 		return "", errs.WithKind(op, errs.Internal, err)
 	}
 
 	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(password))
 	if err != nil {
-		log.Error("invalid password", sl.Err(err))
 		return "", errs.WithKind(op, errs.Unauthenticated, err)
 	}
 
 	app, err := a.appRepository.GetApp(ctx, appId)
 	if err != nil {
-		if errs.KindOf(err) == errs.NotFound || errors.Is(err, storage.ErrAppNotFound) {
-			log.Warn("app not found", sl.Err(err))
+		if errs.KindOf(err) == errs.NotFound {
 			return "", errs.WithKind(op, errs.Unauthenticated, err)
 		}
 
-		log.Error("failed to get app", sl.Err(err))
 		return "", errs.WithKind(op, errs.Internal, err)
 	}
-	log.Info("user logged in successfully")
+
 	token, err = jwt.NewToken(user, app, a.tokenTTL)
 	if err != nil {
-		log.Error("failed to generate jwt token", sl.Err(err))
 		return "", errs.WithKind(op, errs.Internal, err)
 	}
+
+	log.Info("user logged in successfully")
 
 	return token, nil
 }
 
 func (a *AuthService) Register(ctx context.Context, email, password string) (userId int64, err error) {
-	const op = "auth.RegisterNewUser"
+	const op = "auth.Register"
 
 	log := a.log.With(slog.String("op", op), slog.String("email", email))
 
@@ -94,17 +86,14 @@ func (a *AuthService) Register(ctx context.Context, email, password string) (use
 
 	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Error("failed to generate password hash", sl.Err(err))
 		return 0, errs.WithKind(op, errs.Internal, err)
 	}
 
 	id, err := a.userRepository.CreateUser(ctx, email, passHash)
 	if err != nil {
-		if errs.KindOf(err) == errs.AlreadyExists || errors.Is(err, storage.ErrUserExists) {
-			log.Info("user already exists on create", sl.Err(err))
+		if errs.KindOf(err) == errs.AlreadyExists {
 			return 0, errs.WithKind(op, errs.AlreadyExists, err)
 		}
-		log.Error("failed to create new user", sl.Err(err))
 		return 0, errs.WithKind(op, errs.Internal, err)
 	}
 
