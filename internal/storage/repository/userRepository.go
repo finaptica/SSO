@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/finaptica/sso/internal/domain/models"
+	"github.com/finaptica/sso/internal/lib/logger/sl"
 	"github.com/finaptica/sso/internal/storage"
 	"github.com/jmoiron/sqlx"
 )
@@ -20,48 +21,48 @@ func NewUserRepository(log *slog.Logger, db *sqlx.DB) *UserRepository {
 	return &UserRepository{log: log, db: db}
 }
 
-func (u *UserRepository) SaveUser(ctx context.Context, email string, passHash []byte) (int64, error) {
-	const op = "UserRepository.SaveUser"
-	u.log = u.log.With(slog.String("op", op))
+func (u *UserRepository) CreateUser(ctx context.Context, email string, passHash []byte) (int64, error) {
+	const op = "userRepository.CreateUser"
+	log := u.log.With(slog.String("op", op), slog.String("email", email))
 	var id int64
 	err := u.db.QueryRowxContext(ctx, "INSERT INTO users (email, pass_hash) VALUES ($1, $2) RETURNING id", email, passHash).Scan(&id)
 	if err != nil {
-		u.log.Info("failed to create useer")
+		log.Error("failed to create useer", sl.Err(err))
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return id, nil
 }
 
-func (r *UserRepository) User(ctx context.Context, email string) (models.User, error) {
-	var u models.User
-	err := r.db.GetContext(ctx, &u,
+func (u *UserRepository) GetUserByEmail(ctx context.Context, email string) (models.User, error) {
+	const op = "userRepository.GetUserByEmail"
+	log := u.log.With(slog.String("op", op), slog.String("email", email))
+	var user models.User
+	err := u.db.GetContext(ctx, &user,
 		`SELECT id, email, pass_hash FROM users WHERE email = $1`, email,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			log.Info("user not found")
 			return models.User{}, storage.ErrUserNotFound
 		}
-		return models.User{}, fmt.Errorf("get user: %w", err)
+
+		log.Error("failed to get user by email", sl.Err(err))
+		return models.User{}, fmt.Errorf("%s: %w", op, err)
 	}
-	return u, nil
+	return user, nil
 }
 
-func (r *UserRepository) IsAdmin(ctx context.Context, userId int64) (bool, error) {
-	var isAdmin bool
-	err := r.db.GetContext(ctx, &isAdmin,
-		`SELECT is_admin FROM users WHERE id = $1`, userId,
-	)
+func (u *UserRepository) IsUserExistByEmail(ctx context.Context, email string) (bool, error) {
+	const op = "userRepository.IsUserExistByEmail"
+	log := u.log.With(slog.String("op", op), slog.String("email", email))
+	var isExist bool
+	err := u.db.GetContext(ctx, &isExist,
+		"SELECT EXISTS (SELECT 1 FROM users WHERE email = $1)", email)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, storage.ErrUserNotFound
-		}
-		return false, fmt.Errorf("check admin: %w", err)
+		log.Error("failed to check exist user or not", sl.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
 	}
-	return isAdmin, nil
-}
 
-func isUniqueViolation(err error) bool {
-	return err != nil && err.Error() != "" &&
-		(len(err.Error()) >= 21 && err.Error()[0:21] == "pq: duplicate key")
+	return isExist, nil
 }

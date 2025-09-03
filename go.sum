@@ -7,6 +7,8 @@ github.com/finaptica/protos v0.0.0-20250828153103-1df80ab9c61c h1:+pnMgF1aHVJTIV
 github.com/finaptica/protos v0.0.0-20250828153103-1df80ab9c61c/go.mod h1:l/0xNH6+Gt2rCp/U99D+Zu3NAu4/KnjOgQHaddMCs2s=
 github.com/finaptica/protos v0.0.0-20250828205900-fe5fa58210ef h1:tX9FCzUaNOmmpjA6QQ7x1uJag6YB2HgxrDefMtjOZLE=
 github.com/finaptica/protos v0.0.0-20250828205900-fe5fa58210ef/go.mod h1:l/0xNH6+Gt2rCp/U99D+Zu3NAu4/KnjOgQHaddMCs2s=
+github.com/finaptica/protos v0.0.0-20250903123823-bb7ebebd9f7d h1:PGOPBtZUIzrmZ+wUZOTnQQAf4ldOeSCJ1SGDTNx5TZ4=
+github.com/finaptica/protos v0.0.0-20250903123823-bb7ebebd9f7d/go.mod h1:l/0xNH6+Gt2rCp/U99D+Zu3NAu4/KnjOgQHaddMCs2s=
 github.com/go-sql-driver/mysql v1.8.1/go.mod h1:wEBSXgmK//2ZFJyE+qWnIsVGmvmEKlqwuVSjsCm7DZg=
 github.com/golang-jwt/jwt v3.2.2+incompatible h1:IfV12K8xAKAnZqdXVzCZ+TOjboZ2keLg81eXfW3O+oY=
 github.com/golang-jwt/jwt v3.2.2+incompatible/go.mod h1:8pz2t5EyA70fFQQSrl6XZXzqecmYZeUEB8OUGHkxJ+I=

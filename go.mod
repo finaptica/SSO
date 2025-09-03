@@ -16,7 +16,7 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
-	github.com/finaptica/protos v0.0.0-20250828205900-fe5fa58210ef // indirect
+	github.com/finaptica/protos v0.0.0-20250903123823-bb7ebebd9f7d // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/ilyakaznacheev/cleanenv v1.5.0 // indirect
 	github.com/jmoiron/sqlx v1.4.0

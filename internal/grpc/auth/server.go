@@ -11,8 +11,7 @@ import (
 
 type AuthService interface {
 	Login(ctx context.Context, email string, password string, appId int) (token string, err error)
-	RegisterNewUser(ctx context.Context, email, password string) (userId int64, err error)
-	IsAdmin(ctx context.Context, userId int64) (isAdmin bool, err error)
+	Register(ctx context.Context, email, password string) (userId int64, err error)
 }
 
 type serverAPI struct {
@@ -47,10 +46,6 @@ func (s *serverAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.
 	}, nil
 }
 
-func (s *serverAPI) IsAdmin(ctx context.Context, req *ssov1.IsAdminRequest) (*ssov1.IsAdminResponse, error) {
-	panic("implement me")
-}
-
 func validateLogin(req *ssov1.LoginRequest) error {
 	if req.GetEmail() == "" {
 		return status.Error(codes.InvalidArgument, "Email is required")
@@ -62,6 +57,18 @@ func validateLogin(req *ssov1.LoginRequest) error {
 
 	if req.GetAppId() == emptyValue {
 		return status.Error(codes.InvalidArgument, "App ID is required")
+	}
+
+	return nil
+}
+
+func validateRegister(req *ssov1.RegisterRequest) error {
+	if req.GetEmail() == "" {
+		return status.Error(codes.InvalidArgument, "Email is required")
+	}
+
+	if req.GetPassword() == "" {
+		return status.Error(codes.InvalidArgument, "Password is required")
 	}
 
 	return nil

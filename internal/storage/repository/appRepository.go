@@ -20,7 +20,7 @@ func NewAppRepository(log *slog.Logger, db *sqlx.DB) *AppRepository {
 	return &AppRepository{log: log, db: db}
 }
 
-func (r *AppRepository) App(ctx context.Context, appId int) (models.App, error) {
+func (r *AppRepository) GetApp(ctx context.Context, appId int) (models.App, error) {
 	var app models.App
 	err := r.db.GetContext(ctx, &app,
 		`SELECT id, name FROM apps WHERE id = $1`, appId,

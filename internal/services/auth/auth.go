@@ -23,16 +23,16 @@ type AuthService struct {
 }
 
 type UserSaver interface {
-	SaveUser(ctx context.Context, email string, passHash []byte) (uid int64, err error)
+	CreateUser(ctx context.Context, email string, passHash []byte) (uid int64, err error)
 }
 
 type UserProvider interface {
-	User(ctx context.Context, email string) (models.User, error)
-	IsAdmin(ctx context.Context, userId int64) (bool, error)
+	GetUserByEmail(ctx context.Context, email string) (models.User, error)
+	IsUserExistByEmail(ctx context.Context, email string) (bool, error)
 }
 
 type AppProvider interface {
-	App(ctx context.Context, appId int) (models.App, error)
+	GetApp(ctx context.Context, appId int) (models.App, error)
 }
 
 var (
@@ -57,14 +57,14 @@ func (a *AuthService) Login(ctx context.Context, email string, password string, 
 
 	log.Info("attempting to login user")
 
-	user, err := a.userProvider.User(ctx, email)
+	user, err := a.userProvider.GetUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
-			a.log.Warn("user not found", sl.Err(err))
+			log.Warn("user not found", sl.Err(err))
 			return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 		}
 
-		a.log.Error("failed to get user", sl.Err(err))
+		log.Error("failed to get user", sl.Err(err))
 
 		return "", fmt.Errorf("%s: %w", op, err)
 	}
@@ -76,7 +76,7 @@ func (a *AuthService) Login(ctx context.Context, email string, password string, 
 		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
 
-	app, err := a.appProvider.App(ctx, appId)
+	app, err := a.appProvider.GetApp(ctx, appId)
 	if err != nil {
 		if errors.Is(err, storage.ErrAppNotFound) {
 			a.log.Warn("app not found", sl.Err(err))
@@ -96,7 +96,7 @@ func (a *AuthService) Login(ctx context.Context, email string, password string, 
 	return token, nil
 }
 
-func (a *AuthService) RegisterNewUser(ctx context.Context, email, password string) (userId int64, err error) {
+func (a *AuthService) Register(ctx context.Context, email, password string) (userId int64, err error) {
 	const op = "auth.RegisterNewUser"
 
 	log := a.log.With(slog.String("op", op), slog.String("email", email))
@@ -108,7 +108,19 @@ func (a *AuthService) RegisterNewUser(ctx context.Context, email, password strin
 		log.Error("failed to generate password hash", sl.Err(err))
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
-	id, err := a.userSaver.SaveUser(ctx, email, passHash)
+
+	isExist, err := a.userProvider.IsUserExistByEmail(ctx, email)
+	if err != nil {
+		log.Error("failed to check is user exist", sl.Err(err))
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if isExist {
+		log.Info("user with this email already exists")
+		return 0, fmt.Errorf("%s: %s", op, "user with this email already exists")
+	}
+
+	id, err := a.userSaver.CreateUser(ctx, email, passHash)
 	if err != nil {
 		log.Error("failed to save new user", sl.Err(err))
 		return 0, fmt.Errorf("%s: %w", op, err)
@@ -117,20 +129,4 @@ func (a *AuthService) RegisterNewUser(ctx context.Context, email, password strin
 	log.Info("user registered")
 	return id, nil
 
-}
-
-func (a *AuthService) IsAdmin(ctx context.Context, userId int64) (isAdmin bool, err error) {
-	const op = "Auth.IsAdmin"
-
-	log := a.log.With(slog.String("op", op), slog.Int64("userId", userId))
-
-	log.Info("checking that user is admin")
-
-	isAdmin, err = a.userProvider.IsAdmin(ctx, userId)
-	if err != nil {
-		log.Error("failed to check user", sl.Err(err))
-		return false, fmt.Errorf("%s: %w", op, err)
-	}
-	log.Info("checked that user is admin", slog.Bool("isAdmin", isAdmin))
-	return isAdmin, nil
 }
