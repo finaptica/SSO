@@ -10,6 +10,7 @@ import (
 	"github.com/finaptica/sso/internal/lib/errs"
 	"github.com/finaptica/sso/internal/lib/logger/sl"
 	"github.com/finaptica/sso/internal/storage"
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -23,19 +24,19 @@ func NewUserRepository(log *slog.Logger, db *sqlx.DB) *UserRepository {
 	return &UserRepository{log: log, db: db}
 }
 
-func (u *UserRepository) CreateUser(ctx context.Context, email string, passHash []byte) (int64, error) {
+func (u *UserRepository) CreateUser(ctx context.Context, email string, passHash []byte) (uuid.UUID, error) {
 	const op = "userRepository.CreateUser"
 	log := u.log.With(slog.String("op", op), slog.String("email", email))
-	var id int64
+	var id uuid.UUID
 	err := u.db.QueryRowxContext(ctx, "INSERT INTO users (email, pass_hash) VALUES ($1, $2) RETURNING id", email, passHash).Scan(&id)
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
 			log.Info("user already exists", sl.Err(err))
-			return 0, errs.WithKind(op, errs.AlreadyExists, storage.ErrUserExists)
+			return uuid.UUID{}, errs.WithKind(op, errs.AlreadyExists, storage.ErrUserExists)
 		}
 		log.Error("failed to create user", sl.Err(err))
-		return 0, errs.WithKind(op, errs.Internal, err)
+		return uuid.UUID{}, errs.WithKind(op, errs.Internal, err)
 	}
 
 	return id, nil

@@ -1,13 +1,14 @@
-package jwt
+package token
 
 import (
+	"math/rand"
 	"time"
 
 	"github.com/finaptica/sso/internal/domain/models"
 	"github.com/golang-jwt/jwt"
 )
 
-func NewToken(user models.User, app models.App, ttl time.Duration) (string, error) {
+func NewAccessToken(user models.User, app models.App, ttl time.Duration) (string, error) {
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
 	claims["uid"] = user.ID
@@ -21,4 +22,16 @@ func NewToken(user models.User, app models.App, ttl time.Duration) (string, erro
 	}
 
 	return tokenString, nil
+}
+
+var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+const refreshTokenLength = 32
+
+func NewRefreshToken() string {
+	b := make([]rune, refreshTokenLength)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
 }

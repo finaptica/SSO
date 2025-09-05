@@ -21,7 +21,7 @@ func main() {
 	log := setupLogger(cfg.Env)
 	log.Info("Starting application...")
 
-	application := app.New(log, cfg.GRPC.Port, cfg.ConnectionStringPostgres, cfg.TokenTTL)
+	application := app.New(log, cfg.GRPC.Port, cfg.ConnectionStringPostgres, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 
 	go application.GRPCSrv.MustRun()
 

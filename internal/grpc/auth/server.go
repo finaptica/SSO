@@ -2,17 +2,26 @@ package auth
 
 import (
 	"context"
+	"time"
 
 	ssov1 "github.com/finaptica/protos/gen/go/sso"
 	"github.com/finaptica/sso/internal/lib/errs"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type AuthService interface {
-	Login(ctx context.Context, email string, password string, appId int) (token string, err error)
-	Register(ctx context.Context, email, password string) (userId int64, err error)
+	Login(ctx context.Context, email string, password string, appId int) (tokensInfo TokensInfo, err error)
+	Register(ctx context.Context, email, password string) (userId uuid.UUID, err error)
+}
+
+type TokensInfo struct {
+	AccessToken           string
+	RefreshToken          string
+	RefreshTokenExpiresAt time.Time
 }
 
 type serverAPI struct {
@@ -43,7 +52,7 @@ func (s *serverAPI) Register(ctx context.Context, req *ssov1.RegisterRequest) (*
 		}
 	}
 
-	return &ssov1.RegisterResponse{UserId: id}, nil
+	return &ssov1.RegisterResponse{UserId: id.String()}, nil
 }
 
 func (s *serverAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.LoginResponse, error) {
@@ -51,7 +60,7 @@ func (s *serverAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	token, err := s.authService.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.AppId))
+	tokensInfo, err := s.authService.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.AppId))
 	if err != nil {
 		if errs.KindOf(err) == errs.Unauthenticated {
 			return nil, status.Error(codes.Unauthenticated, "Invalid email or password")
@@ -60,7 +69,9 @@ func (s *serverAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.
 	}
 
 	return &ssov1.LoginResponse{
-		Token: token,
+		AccessToken:           tokensInfo.AccessToken,
+		RefreshToken:          tokensInfo.RefreshToken,
+		RefreshTokenExpiresAt: timestamppb.New(tokensInfo.RefreshTokenExpiresAt),
 	}, nil
 }
 
