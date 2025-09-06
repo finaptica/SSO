@@ -61,6 +61,24 @@ func (u *UserRepository) GetUserByEmail(ctx context.Context, email string) (mode
 	return user, nil
 }
 
+func (u *UserRepository) GetUserByIDTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (models.User, error) {
+	const op = "userRepository.GetUserByIDTx"
+	log := u.log.With(slog.String("op", op), slog.String("userID", id.String()))
+
+	var user models.User
+	err := tx.GetContext(ctx, &user, `SELECT id, email, pass_hash FROM users WHERE id = $1`, id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Info("user not found")
+			return models.User{}, errs.WithKind(op, errs.NotFound, storage.ErrUserNotFound)
+		}
+		log.Error("failed to get user by ID", sl.Err(err))
+		return models.User{}, errs.WithKind(op, errs.Internal, err)
+	}
+
+	return user, nil
+}
+
 func (u *UserRepository) IsUserExistByEmail(ctx context.Context, email string) (bool, error) {
 	const op = "userRepository.IsUserExistByEmail"
 	log := u.log.With(slog.String("op", op), slog.String("email", email))

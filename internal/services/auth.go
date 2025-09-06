@@ -1,11 +1,10 @@
-package auth
+package services
 
 import (
 	"context"
 	"log/slog"
 	"time"
 
-	"github.com/finaptica/sso/internal/domain/models"
 	srv "github.com/finaptica/sso/internal/grpc/auth"
 	"github.com/finaptica/sso/internal/lib/errs"
 	tokenGen "github.com/finaptica/sso/internal/lib/token"
@@ -20,19 +19,6 @@ type AuthService struct {
 	log                    *slog.Logger
 	accessTokenTTL         time.Duration
 	refreshTokenTTL        time.Duration
-}
-
-type UserRepository interface {
-	CreateUser(ctx context.Context, email string, passHash []byte) (uid uuid.UUID, err error)
-	GetUserByEmail(ctx context.Context, email string) (models.User, error)
-}
-
-type AppRepository interface {
-	GetApp(ctx context.Context, appId int) (models.App, error)
-}
-
-type RefreshTokenRepository interface {
-	SaveNewRefreshToken(ctx context.Context, userId uuid.UUID, appId int, value string, expiresAt time.Time) error
 }
 
 // NewAuthService returns a new instance of the AuthService

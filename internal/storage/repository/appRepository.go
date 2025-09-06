@@ -34,3 +34,16 @@ func (r *AppRepository) GetApp(ctx context.Context, appId int) (models.App, erro
 	}
 	return app, nil
 }
+
+func (r *AppRepository) GetAppByIDTx(ctx context.Context, tx *sqlx.Tx, id int) (models.App, error) {
+	const op = "appRepository.GetAppByIDTx"
+	var app models.App
+	err := tx.GetContext(ctx, &app, `SELECT id, name, secret FROM apps WHERE id = $1`, id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return models.App{}, errs.WithKind(op, errs.NotFound, storage.ErrAppNotFound)
+		}
+		return models.App{}, errs.WithKind(op, errs.Internal, err)
+	}
+	return app, nil
+}

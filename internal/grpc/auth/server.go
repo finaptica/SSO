@@ -18,6 +18,10 @@ type AuthService interface {
 	Register(ctx context.Context, email, password string) (userId uuid.UUID, err error)
 }
 
+type RefreshTokenService interface {
+	RefreshTokens(ctx context.Context, refreshToken string) (tokensInfo TokensInfo, err error)
+}
+
 type TokensInfo struct {
 	AccessToken           string
 	RefreshToken          string
@@ -26,11 +30,12 @@ type TokensInfo struct {
 
 type serverAPI struct {
 	ssov1.UnimplementedAuthServer
-	authService AuthService
+	authService         AuthService
+	refreshTokenService RefreshTokenService
 }
 
-func Register(gRPC *grpc.Server, auth AuthService) {
-	ssov1.RegisterAuthServer(gRPC, &serverAPI{authService: auth})
+func Register(gRPC *grpc.Server, auth AuthService, refreshTokenService RefreshTokenService) {
+	ssov1.RegisterAuthServer(gRPC, &serverAPI{authService: auth, refreshTokenService: refreshTokenService})
 }
 
 const (
@@ -66,6 +71,30 @@ func (s *serverAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.
 			return nil, status.Error(codes.Unauthenticated, "Invalid email or password")
 		}
 		return nil, errs.ToStatus(err)
+	}
+
+	return &ssov1.LoginResponse{
+		AccessToken:           tokensInfo.AccessToken,
+		RefreshToken:          tokensInfo.RefreshToken,
+		RefreshTokenExpiresAt: timestamppb.New(tokensInfo.RefreshTokenExpiresAt),
+	}, nil
+}
+
+func (s *serverAPI) RefreshTokens(ctx context.Context, req *ssov1.RefreshTokenRequest) (*ssov1.LoginResponse, error) {
+	if req.GetRefreshToken() == "" {
+		return nil, status.Error(codes.InvalidArgument, "Refresh token is required")
+	}
+
+	tokensInfo, err := s.refreshTokenService.RefreshTokens(ctx, req.GetRefreshToken())
+	if err != nil {
+		switch errs.KindOf(err) {
+		case errs.Unauthenticated:
+			return nil, status.Error(codes.Unauthenticated, "Invalid or expired refresh token")
+		case errs.NotFound:
+			return nil, status.Error(codes.NotFound, "Refresh token not found")
+		default:
+			return nil, errs.ToStatus(err)
+		}
 	}
 
 	return &ssov1.LoginResponse{

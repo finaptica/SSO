@@ -6,7 +6,7 @@ import (
 	"net"
 
 	authgrpc "github.com/finaptica/sso/internal/grpc/auth"
-	auth "github.com/finaptica/sso/internal/services/auth"
+	services "github.com/finaptica/sso/internal/services"
 	"google.golang.org/grpc"
 )
 
@@ -16,10 +16,10 @@ type AppServer struct {
 	port       int
 }
 
-func New(logger *slog.Logger, port int, authService *auth.AuthService) *AppServer {
+func New(logger *slog.Logger, port int, authService *services.AuthService, rtService *services.RefreshTokenService) *AppServer {
 	gRPCServer := grpc.NewServer()
 
-	authgrpc.Register(gRPCServer, authService)
+	authgrpc.Register(gRPCServer, authService, rtService)
 
 	return &AppServer{
 		log:        logger,

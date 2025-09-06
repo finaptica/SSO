@@ -27,5 +27,6 @@ CREATE TABLE "refresh_tokens" (
 	"value" VARCHAR(32) NOT NULL,
 	"created_at" TIMESTAMPTZ NOT NULL,
 	"expires_at" TIMESTAMPTZ NOT NULL,
+	"is_revoked" BOOLEAN NOT NULL DEFAULT false,
 	PRIMARY KEY("id")
 );

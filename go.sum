@@ -11,6 +11,8 @@ github.com/finaptica/protos v0.0.0-20250903123823-bb7ebebd9f7d h1:PGOPBtZUIzrmZ+
 github.com/finaptica/protos v0.0.0-20250903123823-bb7ebebd9f7d/go.mod h1:l/0xNH6+Gt2rCp/U99D+Zu3NAu4/KnjOgQHaddMCs2s=
 github.com/finaptica/protos v1.0.0 h1:aoIaa5azIrUv+z/KpAY2VqBpv/wM+QS7Om3Buefmax0=
 github.com/finaptica/protos v1.0.0/go.mod h1:l/0xNH6+Gt2rCp/U99D+Zu3NAu4/KnjOgQHaddMCs2s=
+github.com/finaptica/protos v1.0.1 h1:2bLz4sbkOj372+k8fR+x1JbiExJiyzx2jyuB1c2QAYs=
+github.com/finaptica/protos v1.0.1/go.mod h1:hirMVlVcEaBsxoLcpasy5OYHmrJoZTodzLOejsBZogc=
 github.com/go-sql-driver/mysql v1.8.1/go.mod h1:wEBSXgmK//2ZFJyE+qWnIsVGmvmEKlqwuVSjsCm7DZg=
 github.com/golang-jwt/jwt v3.2.2+incompatible h1:IfV12K8xAKAnZqdXVzCZ+TOjboZ2keLg81eXfW3O+oY=
 github.com/golang-jwt/jwt v3.2.2+incompatible/go.mod h1:8pz2t5EyA70fFQQSrl6XZXzqecmYZeUEB8OUGHkxJ+I=
