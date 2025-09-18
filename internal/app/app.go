@@ -1,32 +1,82 @@
 package app
 
 import (
+	"fmt"
 	"log/slog"
-	"time"
+	"net/http"
 
-	grpcapp "github.com/finaptica/sso/internal/app/grpc"
+	"github.com/finaptica/sso/internal/config"
+	"github.com/finaptica/sso/internal/handlers"
+	"github.com/finaptica/sso/internal/lib/middlewares"
 	"github.com/finaptica/sso/internal/services"
 	"github.com/finaptica/sso/internal/storage"
 	"github.com/finaptica/sso/internal/storage/repository"
+	"github.com/go-chi/chi/v5"
 )
 
 type App struct {
-	GRPCSrv *grpcapp.AppServer
+	log    *slog.Logger
+	router *chi.Mux
+	port   int
 }
 
-func New(log *slog.Logger, grpcPort int, postgresConnectionString string, accessTokenTTL time.Duration, refreshTokenTTL time.Duration) *App {
-	db, err := storage.New(log, postgresConnectionString)
+func New(log *slog.Logger, cfg *config.Config) *App {
+	db, err := storage.New(log, cfg.ConnectionStringPostgres)
 	if err != nil {
 		log.Error("failed to init storage", slog.String("err", err.Error()))
 		panic(err)
 	}
-	userRepository := repository.NewUserRepository(log, db)
-	appRepository := repository.NewAppRepository(log, db)
-	refreshTokenRepository := repository.NewRefreshTokenRepository(log, db)
-	authService := services.NewAuthService(log, userRepository, appRepository, refreshTokenRepository, accessTokenTTL, refreshTokenTTL)
-	rtsService := services.NewRefreshTokenService(refreshTokenRepository, userRepository, appRepository, log, refreshTokenTTL, accessTokenTTL)
-	grpcApp := grpcapp.New(log, grpcPort, authService, rtsService)
-	return &App{
-		GRPCSrv: grpcApp,
+	repositoryContainer := services.RepositoriesContainer{
+		UserRepo: repository.NewUserRepository(log, db),
+		RtsRepo:  repository.NewRefreshTokenRepository(log, db),
+		AppRepo:  repository.NewAppRepository(log, db),
+		Uow:      storage.NewUnitOfWork(db),
 	}
+
+	servicesContainer := handlers.ServicesContainer{
+		AuthService: services.NewAuthService(log, repositoryContainer, cfg),
+		RtsService:  services.NewRefreshTokenService(log, repositoryContainer, cfg),
+	}
+
+	authHandler := handlers.NewAuthHandler(servicesContainer)
+
+	r := chi.NewRouter()
+	r.Use(middlewares.Recoverer(log))
+	r.Route("/auth", func(r chi.Router) {
+		r.Post("/register", authHandler.Register)
+		r.Post("/login", authHandler.Login)
+		r.Post("/refresh", authHandler.Refresh)
+	})
+
+	return &App{
+		router: r,
+		port:   cfg.Http.Port,
+		log:    log,
+	}
+}
+
+func (a *App) MustRun() {
+	if err := a.Run(); err != nil {
+		panic(err)
+	}
+}
+
+func (a *App) Run() error {
+	const op = "httpapp.Run"
+	log := a.log.With(
+		slog.String("op", op),
+		slog.Int("port", a.port),
+	)
+
+	err := http.ListenAndServe(fmt.Sprintf(":%d", a.port), a.router)
+	if err != nil {
+		log.Error("failed to listen and serve")
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+func (a *App) Stop() error {
+	return nil
 }

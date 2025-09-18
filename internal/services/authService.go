@@ -5,7 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	srv "github.com/finaptica/sso/internal/grpc/auth"
+	"github.com/finaptica/sso/internal/config"
+	"github.com/finaptica/sso/internal/contracts"
 	"github.com/finaptica/sso/internal/lib/errs"
 	tokenGen "github.com/finaptica/sso/internal/lib/token"
 	"github.com/google/uuid"
@@ -22,18 +23,18 @@ type AuthService struct {
 }
 
 // NewAuthService returns a new instance of the AuthService
-func NewAuthService(log *slog.Logger, userRepository UserRepository, appRepository AppRepository, refreshTokenRepository RefreshTokenRepository, acessTTL time.Duration, refreshTTL time.Duration) *AuthService {
+func NewAuthService(log *slog.Logger, repoContainer RepositoriesContainer, cfg *config.Config) *AuthService {
 	return &AuthService{
 		log:                    log,
-		userRepository:         userRepository,
-		appRepository:          appRepository,
-		refreshTokenRepository: refreshTokenRepository,
-		accessTokenTTL:         acessTTL,
-		refreshTokenTTL:        refreshTTL,
+		userRepository:         repoContainer.UserRepo,
+		appRepository:          repoContainer.AppRepo,
+		refreshTokenRepository: repoContainer.RtsRepo,
+		accessTokenTTL:         cfg.AccessTokenTTL,
+		refreshTokenTTL:        cfg.RefreshTokenTTL,
 	}
 }
 
-func (a *AuthService) Login(ctx context.Context, email string, password string, appId int) (tokensInfo srv.TokensInfo, err error) {
+func (a *AuthService) Login(ctx context.Context, email string, password string, appId int) (tokensInfo contracts.TokensInfo, err error) {
 	const op = "auth.Login"
 
 	log := a.log.With(slog.String("op", op), slog.String("email", email))
@@ -43,40 +44,40 @@ func (a *AuthService) Login(ctx context.Context, email string, password string, 
 	user, err := a.userRepository.GetUserByEmail(ctx, email)
 	if err != nil {
 		if errs.KindOf(err) == errs.NotFound {
-			return srv.TokensInfo{}, errs.WithKind(op, errs.Unauthenticated, err)
+			return contracts.TokensInfo{}, errs.WithKind(op, errs.Unauthenticated, err)
 		}
 
-		return srv.TokensInfo{}, errs.WithKind(op, errs.Internal, err)
+		return contracts.TokensInfo{}, errs.WithKind(op, errs.Internal, err)
 	}
 
 	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(password))
 	if err != nil {
-		return srv.TokensInfo{}, errs.WithKind(op, errs.Unauthenticated, err)
+		return contracts.TokensInfo{}, errs.WithKind(op, errs.Unauthenticated, err)
 	}
 
-	app, err := a.appRepository.GetApp(ctx, appId)
+	app, err := a.appRepository.GetAppById(ctx, appId)
 	if err != nil {
 		if errs.KindOf(err) == errs.NotFound {
-			return srv.TokensInfo{}, errs.WithKind(op, errs.Unauthenticated, err)
+			return contracts.TokensInfo{}, errs.WithKind(op, errs.Unauthenticated, err)
 		}
 
-		return srv.TokensInfo{}, errs.WithKind(op, errs.Internal, err)
+		return contracts.TokensInfo{}, errs.WithKind(op, errs.Internal, err)
 	}
 
 	accessToken, err := tokenGen.NewAccessToken(user, app, a.accessTokenTTL)
 	if err != nil {
-		return srv.TokensInfo{}, errs.WithKind(op, errs.Internal, err)
+		return contracts.TokensInfo{}, errs.WithKind(op, errs.Internal, err)
 	}
 
 	refreshTokenValue := tokenGen.NewRefreshToken()
 	refreshTokenExpiresAt := time.Now().UTC().Add(a.refreshTokenTTL)
-	err = a.refreshTokenRepository.SaveNewRefreshToken(ctx, user.ID, app.ID, refreshTokenValue, refreshTokenExpiresAt)
+	_, err = a.refreshTokenRepository.SaveNewRefreshToken(ctx, user.ID, app.ID, refreshTokenValue, refreshTokenExpiresAt)
 	if err != nil {
-		return srv.TokensInfo{}, errs.WithKind(op, errs.Internal, err)
+		return contracts.TokensInfo{}, errs.WithKind(op, errs.Internal, err)
 	}
 
 	log.Info("user logged in successfully")
-	tokensInfo = srv.TokensInfo{
+	tokensInfo = contracts.TokensInfo{
 		AccessToken:           accessToken,
 		RefreshToken:          refreshTokenValue,
 		RefreshTokenExpiresAt: refreshTokenExpiresAt,

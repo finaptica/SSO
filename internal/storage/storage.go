@@ -1,26 +1,44 @@
 package storage
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"log/slog"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/jackc/pgx/v5"
 	_ "github.com/lib/pq"
 )
 
-var (
-	ErrUserExists    = errors.New("user already exists")
-	ErrUserNotFound  = errors.New("user not found")
-	ErrAppNotFound   = errors.New("app not found")
-	ErrTokenNotFound = errors.New("token not found")
-)
-
-func New(logger *slog.Logger, postgresConnectionString string) (*sqlx.DB, error) {
-	db, err := sqlx.Connect("postgres", postgresConnectionString)
+func New(logger *slog.Logger, postgresConnectionString string) (*pgx.Conn, error) {
+	db, err := pgx.Connect(context.Background(), postgresConnectionString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect postgres: %w", err)
 	}
 
 	return db, nil
+}
+
+type UnitOfWork struct {
+	db *pgx.Conn
+}
+
+func NewUnitOfWork(db *pgx.Conn) *UnitOfWork {
+	return &UnitOfWork{db: db}
+}
+
+func (u *UnitOfWork) Do(ctx context.Context, fn func(pgx.Tx) error) error {
+	tx, err := u.db.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel: pgx.Serializable,
+	})
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback(ctx)
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }

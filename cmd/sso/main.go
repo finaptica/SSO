@@ -21,14 +21,14 @@ func main() {
 	log := setupLogger(cfg.Env)
 	log.Info("Starting application...")
 
-	application := app.New(log, cfg.GRPC.Port, cfg.ConnectionStringPostgres, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
+	application := app.New(log, cfg)
 
-	go application.GRPCSrv.MustRun()
+	go application.MustRun()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
 	<-stop
-	application.GRPCSrv.Stop()
+	application.Stop()
 	log.Info("Application stopped")
 }
 

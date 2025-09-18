@@ -9,43 +9,38 @@ import (
 	"github.com/finaptica/sso/internal/domain/models"
 	"github.com/finaptica/sso/internal/lib/errs"
 	"github.com/finaptica/sso/internal/lib/logger/sl"
-	"github.com/finaptica/sso/internal/storage"
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
+	"github.com/jackc/pgx/v5"
 )
 
 type RefreshTokenRepository struct {
-	db  *sqlx.DB
+	db  *pgx.Conn
 	log *slog.Logger
 }
 
-func NewRefreshTokenRepository(log *slog.Logger, db *sqlx.DB) *RefreshTokenRepository {
+func NewRefreshTokenRepository(log *slog.Logger, db *pgx.Conn) *RefreshTokenRepository {
 	return &RefreshTokenRepository{log: log, db: db}
 }
 
-func (r *RefreshTokenRepository) DB() *sqlx.DB {
-	return r.db
-}
-
-func (r *RefreshTokenRepository) SaveNewRefreshToken(ctx context.Context, userId uuid.UUID, appId int, value string, expiresAt time.Time) error {
+func (r *RefreshTokenRepository) SaveNewRefreshToken(ctx context.Context, userId uuid.UUID, appId int, value string, expiresAt time.Time) (uuid.UUID, error) {
 	const op = "refreshTokenRepository.SaveNewRefreshToken"
 	log := r.log.With(slog.String("op", op), slog.String("refreshTokenValue", value))
 	var id uuid.UUID
-	err := r.db.QueryRowxContext(ctx, "INSERT INTO refresh_tokens (user_id, app_id, value, created_at, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING id", userId, appId, value, time.Now().UTC(), expiresAt).Scan(&id)
+	err := r.db.QueryRow(ctx, "INSERT INTO refresh_tokens (user_id, app_id, value, created_at, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING id", userId, appId, value, time.Now().UTC(), expiresAt).Scan(&id)
 	if err != nil {
 		log.Error("failed to create refresh token", sl.Err(err))
-		return errs.WithKind(op, errs.Internal, err)
+		return uuid.UUID{}, errs.WithKind(op, errs.Internal, err)
 	}
 
-	return nil
+	return id, nil
 }
 
-func (r *RefreshTokenRepository) SaveNewRefreshTokenTx(ctx context.Context, tx *sqlx.Tx, userId uuid.UUID, appId int, value string, expiresAt time.Time) error {
+func (r *RefreshTokenRepository) SaveNewRefreshTokenTx(ctx context.Context, tx pgx.Tx, userId uuid.UUID, appId int, value string, expiresAt time.Time) (uuid.UUID, error) {
 	const op = "refreshTokenRepository.SaveNewRefreshTokenTx"
 	log := r.log.With(slog.String("op", op), slog.String("refreshTokenValue", value))
 
 	var id uuid.UUID
-	err := tx.QueryRowxContext(
+	err := tx.QueryRow(
 		ctx,
 		`INSERT INTO refresh_tokens (user_id, app_id, value, created_at, expires_at) 
 		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
@@ -54,16 +49,16 @@ func (r *RefreshTokenRepository) SaveNewRefreshTokenTx(ctx context.Context, tx *
 
 	if err != nil {
 		log.Error("failed to create refresh token", sl.Err(err))
-		return errs.WithKind(op, errs.Internal, err)
+		return uuid.UUID{}, errs.WithKind(op, errs.Internal, err)
 	}
 
-	return nil
+	return id, nil
 }
 
 func (r *RefreshTokenRepository) Revoke(ctx context.Context, tokenId uuid.UUID) error {
 	const op = "refreshTokenRepository.Revoke"
 	log := r.log.With(slog.String("op", op))
-	_, err := r.db.ExecContext(ctx, "UPDATE refresh_tokens SET is_revoked = true WHERE id = $1", tokenId)
+	_, err := r.db.Exec(ctx, "UPDATE refresh_tokens SET is_revoked = true WHERE id = $1", tokenId)
 	if err != nil {
 		log.Error("failed to revoke token", sl.Err(err))
 		return errs.WithKind(op, errs.Internal, err)
@@ -76,10 +71,10 @@ func (r *RefreshTokenRepository) GetByValue(ctx context.Context, tokenValue stri
 	const op = "refreshTokenRepository.GetByValue"
 	log := r.log.With(slog.String("op", op))
 	var token models.RefreshToken
-	err := r.db.GetContext(ctx, &token, "SELECT * FROM refresh_tokens WHERE value = $1", tokenValue)
+	err := r.db.QueryRow(ctx, "SELECT id, user_id, app_id, value, is_revoked, created_at, expires_at FROM refresh_tokens WHERE value = $1", tokenValue).Scan(&token.ID, &token.UserID, &token.AppID, &token.Value, &token.IsRevoked, &token.CreatedAt, &token.ExpiresAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return &models.RefreshToken{}, errs.WithKind(op, errs.NotFound, storage.ErrTokenNotFound)
+			return &models.RefreshToken{}, errs.WithKind(op, errs.NotFound, err)
 		}
 		log.Error("failed to get token by value", sl.Err(err))
 		return &models.RefreshToken{}, errs.WithKind(op, errs.Internal, err)
@@ -88,13 +83,13 @@ func (r *RefreshTokenRepository) GetByValue(ctx context.Context, tokenValue stri
 	return &token, nil
 }
 
-func (r *RefreshTokenRepository) RevokeTx(ctx context.Context, tx *sqlx.Tx, tokenID uuid.UUID) error {
-	_, err := tx.ExecContext(ctx, "UPDATE refresh_tokens SET is_revoked = true WHERE id = $1", tokenID)
+func (r *RefreshTokenRepository) RevokeTx(ctx context.Context, tx pgx.Tx, tokenID uuid.UUID) error {
+	_, err := tx.Exec(ctx, "UPDATE refresh_tokens SET is_revoked = true WHERE id = $1", tokenID)
 	return err
 }
 
-func (r *RefreshTokenRepository) GetByValueTx(ctx context.Context, tx *sqlx.Tx, tokenValue string) (models.RefreshToken, error) {
+func (r *RefreshTokenRepository) GetByValueTx(ctx context.Context, tx pgx.Tx, tokenValue string) (models.RefreshToken, error) {
 	var token models.RefreshToken
-	err := tx.GetContext(ctx, &token, "SELECT * FROM refresh_tokens WHERE value = $1", tokenValue)
+	err := tx.QueryRow(ctx, "SELECT id, user_id, app_id, value, is_revoked, created_at, expires_at  FROM refresh_tokens WHERE value = $1", tokenValue).Scan(&token.ID, &token.UserID, &token.AppID, &token.Value, &token.IsRevoked, &token.CreatedAt, &token.ExpiresAt)
 	return token, err
 }

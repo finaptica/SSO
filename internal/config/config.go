@@ -14,10 +14,10 @@ type Config struct {
 	ConnectionStringPostgres string        `yaml:"connection-string-postgres-sso"`
 	AccessTokenTTL           time.Duration `yaml:"access_token_ttl" env-required:"true"`
 	RefreshTokenTTL          time.Duration `yaml:"refresh_token_ttl" env-required:"true"`
-	GRPC                     GRPCConfig    `yaml:"grpc"`
+	Http                     HTTPConfig    `yaml:"http"`
 }
 
-type GRPCConfig struct {
+type HTTPConfig struct {
 	Port    int           `yaml:"port"`
 	Timeout time.Duration `yaml:"timeout"`
 }

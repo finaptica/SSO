@@ -7,41 +7,38 @@ import (
 
 	"github.com/finaptica/sso/internal/domain/models"
 	"github.com/finaptica/sso/internal/lib/errs"
-	"github.com/finaptica/sso/internal/storage"
-	"github.com/jmoiron/sqlx"
+	"github.com/jackc/pgx/v5"
 )
 
 type AppRepository struct {
-	db  *sqlx.DB
+	db  *pgx.Conn
 	log *slog.Logger
 }
 
-func NewAppRepository(log *slog.Logger, db *sqlx.DB) *AppRepository {
+func NewAppRepository(log *slog.Logger, db *pgx.Conn) *AppRepository {
 	return &AppRepository{log: log, db: db}
 }
 
-func (r *AppRepository) GetApp(ctx context.Context, appId int) (models.App, error) {
+func (r *AppRepository) GetAppById(ctx context.Context, appId int) (models.App, error) {
 	const op = "appRepository.GetApp"
 	var app models.App
-	err := r.db.GetContext(ctx, &app,
-		`SELECT id, name, secret FROM apps WHERE id = $1`, appId,
-	)
+	err := r.db.QueryRow(ctx, "SELECT id, name, secret FROM apps WHERE id = $1", appId).Scan(&app.ID, &app.Name, &app.Secret)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return models.App{}, errs.WithKind(op, errs.NotFound, storage.ErrAppNotFound)
+			return models.App{}, errs.WithKind(op, errs.NotFound, err)
 		}
 		return models.App{}, errs.WithKind(op, errs.Internal, err)
 	}
 	return app, nil
 }
 
-func (r *AppRepository) GetAppByIDTx(ctx context.Context, tx *sqlx.Tx, id int) (models.App, error) {
+func (r *AppRepository) GetAppByIDTx(ctx context.Context, tx pgx.Tx, id int) (models.App, error) {
 	const op = "appRepository.GetAppByIDTx"
 	var app models.App
-	err := tx.GetContext(ctx, &app, `SELECT id, name, secret FROM apps WHERE id = $1`, id)
+	err := tx.QueryRow(ctx, "SELECT id,name,secret FROM apps WHERE id = $1", id).Scan(&app.ID, &app.Name, &app.Secret)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return models.App{}, errs.WithKind(op, errs.NotFound, storage.ErrAppNotFound)
+			return models.App{}, errs.WithKind(op, errs.NotFound, err)
 		}
 		return models.App{}, errs.WithKind(op, errs.Internal, err)
 	}
